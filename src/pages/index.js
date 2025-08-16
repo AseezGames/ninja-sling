@@ -10,7 +10,7 @@ export default function Home() {
       <div className={styles.controls}>
         <p>Click and drag from the ball to aim</p>
         <p>Release to launch your ninja to the next platform!</p>
-        <p>Avoid red platforms - they're deadly!</p>
+        <p>Avoid red platforms - they&apos;re deadly!</p>
       </div>
     </div>
   );

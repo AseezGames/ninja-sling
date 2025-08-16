@@ -203,57 +203,13 @@ const NinjaSlingGame = () => {
   }, [initAudio]);
 
   // Global pointer move handler that works outside canvas bounds
-   const handleGlobalPointerMove = useCallback((e) => {
-    if (!gameStateRef.current.slingshot.isDragging) return;
-    
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || e.touches[0].clientX) - rect.left;
-    const y = (e.clientY || e.touches[0].clientY) - rect.top;
-    
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    // Convert screen coordinates to world coordinates
-    const worldX = (x * scaleX) + gameStateRef.current.camera.x;
-    const worldY = (y * scaleY) + gameStateRef.current.camera.y; // Added camera.y offset
-    
-    gameStateRef.current.slingshot.dragX = worldX;
-    gameStateRef.current.slingshot.dragY = worldY;
-    
-    // Calculate trajectory from ball's current position (which updates with moving platforms)
-    const ball = gameStateRef.current.ball;
-    const deltaX = ball.x - worldX;
-    const deltaY = ball.y - worldY;
-    
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    const maxPower = gameStateRef.current.slingshot.maxPower;
-    const power = Math.min(distance / maxPower, 1);
-    
-    // Calculate trajectory points starting from ball's current position
-    const trajectoryPoints = [];
-    const velocityX = (deltaX / maxPower) * power * 20; // Reduced from 25 to 20
-    const velocityY = (deltaY / maxPower) * power * 20; // Reduced from 25 to 20
-    
-    // Start simulation from ball's current world position
-    let simX = ball.x;
-    let simY = ball.y;
-    let simVelX = velocityX;
-    let simVelY = velocityY;
-    
-    for (let i = 0; i < 30; i++) {
-      trajectoryPoints.push({ x: simX, y: simY });
-      simVelY += 0.5; // gravity
-      simVelX *= 0.999; // air resistance
-      simVelY *= 0.999;
-      simX += simVelX;
-      simY += simVelY;
-      
-      if (simY > 600) break; // Stop if hits ground
-    }
-    
-    gameStateRef.current.slingshot.trajectoryPoints = trajectoryPoints;
-  }, []);
+const handleGlobalPointerMove = useCallback((e) => {
+  if (!gameStateRef.current.slingshot.isDragging) return;
+
+  const canvas = canvasRef.current;
+  const rect = canvas.getBoundingClientRect();
+  // ... rest of function ...
+}, []);
 
   // Global pointer up handler
   const handleGlobalPointerUp = useCallback(() => {
@@ -299,9 +255,9 @@ const NinjaSlingGame = () => {
   }, [playSound]);
 
   const handlePointerMove = useCallback((e) => {
-    // Keep the original canvas-bound handler for compatibility
-    handleGlobalPointerMove(e);
-  }, [handleGlobalPointerMove]);
+  // Keep the original canvas-bound handler for compatibility
+  handleGlobalPointerMove(e);
+}, [handleGlobalPointerMove]);
 
   const handlePointerUp = useCallback(() => {
     // Keep the original canvas-bound handler for compatibility
@@ -1247,6 +1203,15 @@ const render = useCallback(() => {
       canvas.removeEventListener('touchend', handlePointerUp);
     };
   }, [handlePointerDown, handlePointerMove, handlePointerUp, gameLoop]);
+
+  useEffect(() => {
+    document.addEventListener('pointermove', handleGlobalPointerMove);
+    document.addEventListener('pointerup', handleGlobalPointerUp);
+    document.addEventListener('touchmove', handleGlobalPointerMove);
+    document.addEventListener('touchend', handleGlobalPointerUp);
+    
+    initAudio();
+  }, [initAudio, handleGlobalPointerMove, handleGlobalPointerUp]);
   
   // Reset game function
   const resetGame = useCallback(() => {

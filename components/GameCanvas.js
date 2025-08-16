@@ -208,7 +208,26 @@ const handleGlobalPointerMove = useCallback((e) => {
 
   const canvas = canvasRef.current;
   const rect = canvas.getBoundingClientRect();
-  // ... rest of function ...
+  
+  // Get pointer coordinates (mouse or touch)
+  const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+  const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+  
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  
+  // Scale coordinates to canvas size and convert to world coordinates
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const worldX = (x * scaleX) + gameStateRef.current.camera.x;
+  const worldY = (y * scaleY) + gameStateRef.current.camera.y;
+  
+  // Update drag position
+  gameStateRef.current.slingshot.dragX = worldX;
+  gameStateRef.current.slingshot.dragY = worldY;
+  
+  // Update trajectory in real-time
+  updateTrajectory();
 }, []);
 
   // Global pointer up handler

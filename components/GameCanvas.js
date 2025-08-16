@@ -13,8 +13,8 @@ const NinjaSlingGame = () => {
       velocityY: 0,
       isLaunched: false,
       bounceCount: 0,
-      maxBounces: 2,
-      bounciness: 0.25, // Reduced from 0.4 to 0.25 for much lower bounces
+      maxBounces: 1,
+      bounciness: 0, // Changed from 0.25 to 0 - no bouncing
       friction: 0.98,
       airResistance: 0.9995,
       color: '#ff6b6b',
@@ -22,6 +22,14 @@ const NinjaSlingGame = () => {
       isOnPlatform: false,
       canSling: true,
       currentPlatform: null
+    },
+
+    // Add timing properties
+    timing: {
+      lastTime: 0,
+      deltaTime: 0,
+      targetFPS: 60,
+      fixedTimeStep: 1000 / 60 // 16.67ms for 60 FPS
     },
     
     // Slingshot mechanics - now relative to ball position
@@ -34,12 +42,12 @@ const NinjaSlingGame = () => {
     },
     
     // Physics constants
-    physics: {
-      gravity: 0.5,
-      minVelocity: 0.1,
-      maxVelocity: 20,
-      stopThreshold: 0.5
-    },
+      physics: {
+        gravity: 0.8,        // Increased from 0.5 to 0.8 for more realistic falling
+        minVelocity: 0.1,
+        maxVelocity: 20,
+        stopThreshold: 0.5
+      },
     
     // Platforms and obstacles
     // Platforms and obstacles - extend initial world to the left
@@ -141,7 +149,7 @@ const NinjaSlingGame = () => {
     return points;
   }, []);
 
-  // Handle mouse/touch input
+  // Handle mouse/touch input - allow clicking near the ball
   const handlePointerDown = useCallback((e) => {
     const canvas = canvasRef.current;
     const ball = gameStateRef.current.ball;
@@ -152,24 +160,34 @@ const NinjaSlingGame = () => {
     const x = (e.clientX || e.touches[0].clientX) - rect.left;
     const y = (e.clientY || e.touches[0].clientY) - rect.top;
     
-    // Scale coordinates to canvas size
+    // Scale coordinates to canvas size and convert to world coordinates
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
+    const worldX = (x * scaleX) + gameStateRef.current.camera.x;
+    const worldY = (y * scaleY) + gameStateRef.current.camera.y;
     
-    gameStateRef.current.slingshot.isDragging = true;
-    gameStateRef.current.slingshot.dragX = x * scaleX;
-    gameStateRef.current.slingshot.dragY = y * scaleY;
+    // Check if click is within ball radius (increased tolerance for easier grabbing)
+    const distanceFromBall = Math.sqrt(
+      Math.pow(worldX - ball.x, 2) + Math.pow(worldY - ball.y, 2)
+    );
     
-    setGameState('aiming');
-    gameStateRef.current.gameState = 'aiming';
-    
-    // Add global event listeners when dragging starts
-    document.addEventListener('mousemove', handleGlobalPointerMove);
-    document.addEventListener('mouseup', handleGlobalPointerUp);
-    document.addEventListener('touchmove', handleGlobalPointerMove);
-    document.addEventListener('touchend', handleGlobalPointerUp);
-    
-    initAudio();
+    // Allow dragging from a larger area around the ball (ball radius + 40px tolerance)
+    if (distanceFromBall <= ball.radius + 40) {
+      gameStateRef.current.slingshot.isDragging = true;
+      gameStateRef.current.slingshot.dragX = worldX;
+      gameStateRef.current.slingshot.dragY = worldY;
+      
+      setGameState('aiming');
+      gameStateRef.current.gameState = 'aiming';
+      
+      // Add global event listeners when dragging starts
+      document.addEventListener('mousemove', handleGlobalPointerMove);
+      document.addEventListener('mouseup', handleGlobalPointerUp);
+      document.addEventListener('touchmove', handleGlobalPointerMove);
+      document.addEventListener('touchend', handleGlobalPointerUp);
+      
+      initAudio();
+    }
   }, [initAudio]);
 
  const handlePointerStart = useCallback((e) => {
@@ -250,8 +268,8 @@ const handleGlobalPointerMove = useCallback((e) => {
 
     if (power > 0.1) { // Lower threshold for more responsive launching
       // Launch the ball with EXACT same calculation as trajectory
-      ball.velocityX = (deltaX / maxPower) * power * 20; // Reduced from 25 to 20
-      ball.velocityY = (deltaY / maxPower) * power * 20; // Reduced from 25 to 20
+      ball.velocityX = (deltaX / maxPower) * power * 25; // Increased from 20 to 25
+      ball.velocityY = (deltaY / maxPower) * power * 25; // Increased from 20 to 25
       ball.isLaunched = true;
       ball.canSling = false;
       ball.bounceCount = 0;
@@ -332,8 +350,8 @@ const handleGlobalPointerMove = useCallback((e) => {
     
     // Calculate trajectory points starting from ball's current position
     const trajectoryPoints = [];
-    const velocityX = (deltaX / maxPower) * power * 30; // Increased from 25 to 30
-    const velocityY = (deltaY / maxPower) * power * 30; // Increased from 25 to 30
+    const velocityX = (deltaX / maxPower) * power * 35; // Increased from 30 to 35
+    const velocityY = (deltaY / maxPower) * power * 35; // Increased from 30 to 35
     
     let simX = ball.x;
     let simY = ball.y;
@@ -363,34 +381,43 @@ const generateUpPlatforms = useCallback(() => {
   
   for (let i = 0; i < platformCount; i++) {
     // Dynamic spacing that increases with height for more challenge
-    const heightFactor = Math.abs(topmostY) / 1000; // Increases difficulty over time
-    const baseSpacing = 80 + (heightFactor * 20); // Spacing increases with height
-    const variableSpacing = Math.random() * (60 + heightFactor * 10);
+    const heightFactor = Math.abs(topmostY) / 1000;
+    const baseSpacing = 80 + (heightFactor * 20);
+    // Add more variable spacing to prevent parallel platforms
+    const variableSpacing = Math.random() * (100 + heightFactor * 20); // Increased from 60
     const y = topmostY - baseSpacing - (i * (baseSpacing + variableSpacing));
     
-    // More varied horizontal positioning
+    // More varied horizontal positioning with better distribution
     let x;
-    const patterns = ['cluster', 'zigzag', 'spread', 'challenge'];
+    const patterns = ['leftSide', 'rightSide', 'center', 'extreme'];
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
     
     switch (pattern) {
-      case 'cluster':
-        // Platforms close together
-        x = 200 + Math.random() * 400;
+      case 'leftSide':
+        // Left side positioning
+        x = 50 + Math.random() * 250;
         break;
-      case 'zigzag':
-        // Alternating sides
-        x = (i % 2 === 0) ? 100 + Math.random() * 200 : 500 + Math.random() * 200;
+      case 'rightSide':
+        // Right side positioning
+        x = 500 + Math.random() * 250;
         break;
-      case 'spread':
-        // Wide distribution
-        x = 50 + Math.random() * 700;
+      case 'center':
+        // Center positioning
+        x = 250 + Math.random() * 300;
         break;
-      case 'challenge':
-        // Harder positioning at higher levels
-        x = 150 + Math.random() * 500;
-        if (heightFactor > 2) x += (Math.random() - 0.5) * 200; // More extreme at high levels
+      case 'extreme':
+        // Far left or far right
+        x = Math.random() > 0.5 ? 50 + Math.random() * 150 : 600 + Math.random() * 150;
         break;
+    }
+    
+    // Ensure platforms don't spawn too close to each other horizontally
+    const minHorizontalDistance = 120;
+    const nearbyPlatforms = platforms.filter(p => Math.abs(p.y - y) < 50);
+    let attempts = 0;
+    while (attempts < 10 && nearbyPlatforms.some(p => Math.abs(p.x - x) < minHorizontalDistance)) {
+      x = 50 + Math.random() * 700;
+      attempts++;
     }
     
     // Dynamic platform sizing based on height
@@ -470,62 +497,69 @@ const regenerateInitialPlatforms = useCallback(() => {
 }, []);
 
   // Update game physics - modified for vertical progression
-  const updatePhysics = useCallback(() => {
+  const updatePhysics = useCallback((deltaMultiplier = 1) => {
     const ball = gameStateRef.current.ball;
     const physics = gameStateRef.current.physics;
     
     // Store previous platform positions for ball movement
-    const platformPrevPositions = new Map();
-    gameStateRef.current.platforms.forEach(platform => {
-      if (platform.type === 'moving') {
-        platformPrevPositions.set(platform, platform.y); // Track Y position instead of X
-      }
-    });
-    
-    // Update moving platforms - now move vertically
-    gameStateRef.current.platforms.forEach(platform => {
-      if (platform.type === 'moving') {
-        platform.y += platform.moveSpeed * platform.moveDirection;
-        
-        if (platform.y <= platform.originalY - platform.moveRange || 
-            platform.y >= platform.originalY + platform.moveRange) {
-          platform.moveDirection *= -1;
+      const platformPrevPositions = new Map();
+      gameStateRef.current.platforms.forEach(platform => {
+        if (platform.type === 'moving') {
+          platformPrevPositions.set(platform, platform.y); // Track Y position instead of X
         }
-        
-        // Move ball with platform if it's on this platform
-        if (ball.currentPlatform === platform && ball.isOnPlatform && !ball.isLaunched) {
-          const prevY = platformPrevPositions.get(platform);
-          const deltaY = platform.y - prevY;
-          ball.y += deltaY;
-        }
+      });
+    
+      // Update moving platforms - continuous A to B to A looping
+  gameStateRef.current.platforms.forEach(platform => {
+    if (platform.type === 'moving') {
+      // Move the platform
+      platform.y += platform.moveSpeed * platform.moveDirection * deltaMultiplier;
+      
+      // Check boundaries and reverse direction for continuous looping
+      if (platform.moveDirection > 0 && platform.y >= platform.originalY + platform.moveRange) {
+        // Moving down, hit bottom boundary - reverse to go up
+        platform.moveDirection = -1;
+        platform.y = platform.originalY + platform.moveRange; // Clamp to exact boundary
+      } else if (platform.moveDirection < 0 && platform.y <= platform.originalY - platform.moveRange) {
+        // Moving up, hit top boundary - reverse to go down
+        platform.moveDirection = 1;
+        platform.y = platform.originalY - platform.moveRange; // Clamp to exact boundary
       }
-    });
+      
+      // Move ball with platform if it's on this platform
+      if (ball.currentPlatform === platform && ball.isOnPlatform && !ball.isLaunched) {
+        const prevY = platformPrevPositions.get(platform);
+        const deltaY = platform.y - prevY;
+        ball.y += deltaY;
+      }
+    }
+  });
     
-    // Update particles - always run
-    gameStateRef.current.particles = gameStateRef.current.particles.filter(particle => {
-      particle.x += particle.velocityX;
-      particle.y += particle.velocityY;
-      particle.velocityY += 0.2;
-      particle.life--;
-      return particle.life > 0;
-    });
+    // Update particles - always run with delta time
+  gameStateRef.current.particles = gameStateRef.current.particles.filter(particle => {
+    particle.x += particle.velocityX * deltaMultiplier;
+    particle.y += particle.velocityY * deltaMultiplier;
+    particle.velocityY += 0.2 * deltaMultiplier;
+    particle.life -= deltaMultiplier;
+    return particle.life > 0;
+  });
     
-    // Update floating texts - always run
-    gameStateRef.current.floatingTexts = gameStateRef.current.floatingTexts.filter(text => {
-      text.y += text.velocityY;
-      text.life--;
-      return text.life > 0;
-    });
+    // Update floating texts - always run with delta time
+  gameStateRef.current.floatingTexts = gameStateRef.current.floatingTexts.filter(text => {
+    text.y += text.velocityY * deltaMultiplier;
+    text.life -= deltaMultiplier;
+    return text.life > 0;
+  });
     
     // Update ball trail - always run (add this new section)
-    ball.trail = ball.trail.filter((point, index) => {
-      // Add a life property to each trail point if it doesn't exist
-      if (!point.life) {
-        point.life = 15; // Start with 15 frames of life
-      }
-      point.life--;
-      return point.life > 0;
-    });
+      ball.trail = ball.trail.filter((point, index) => {
+    // Add a life property to each trail point if it doesn't exist
+    if (!point.life) {
+      point.life = 15; // Start with 15 frames of life
+    }
+    point.life -= deltaMultiplier;
+    return point.life > 0;
+  });
     
     // Update camera to follow ball with upward progression
     const camera = gameStateRef.current.camera;
@@ -534,24 +568,24 @@ const regenerateInitialPlatforms = useCallback(() => {
     const ballScreenY = ball.y - camera.y;
     let targetCameraY = camera.y;
     
-    // If ball is near top edge of screen, move camera up (no world limit)
-    if (ballScreenY < camera.topBoundary) {
-      targetCameraY = ball.y - 300; // Show more above
-      camera.y += (targetCameraY - camera.y) * camera.followSpeed;
-    }
+   // If ball is near top edge of screen, move camera up (no world limit)
+  if (ballScreenY < camera.topBoundary) {
+    targetCameraY = ball.y - 300; // Show more above
+    camera.y += (targetCameraY - camera.y) * camera.followSpeed * deltaMultiplier;
+  }
     // If ball moves down and camera needs to catch up
-    else if (ballScreenY > 400) { // Bottom boundary
-      targetCameraY = ball.y - 400;
-      camera.y += (targetCameraY - camera.y) * camera.followSpeed;
-    }
+  else if (ballScreenY > 400) { // Bottom boundary
+    targetCameraY = ball.y - 400;
+    camera.y += (targetCameraY - camera.y) * camera.followSpeed * deltaMultiplier;
+  }
     
     // Ensure camera doesn't go beyond world boundaries
-    camera.y = Math.min(0, Math.max(camera.y, camera.worldMaxY));
-    
-    // Update camera shake - always run
-    if (gameStateRef.current.camera.shake > 0) {
-      gameStateRef.current.camera.shake *= 0.9;
-    }
+  camera.y = Math.min(0, Math.max(camera.y, camera.worldMaxY));
+  
+  // Update camera shake - always run with delta time
+  if (gameStateRef.current.camera.shake > 0) {
+    gameStateRef.current.camera.shake *= Math.pow(0.9, deltaMultiplier);
+  }
     
     // Update trajectory when aiming (especially important for moving platforms)
     updateTrajectory();
@@ -563,127 +597,105 @@ const regenerateInitialPlatforms = useCallback(() => {
     ball.currentPlatform = null;
     
     // Add to trail (modify this section)
-    ball.trail.push({ x: ball.x, y: ball.y, life: 15 });
-    if (ball.trail.length > 15) ball.trail.shift();
+  
+  ball.trail.push({ x: ball.x, y: ball.y, life: 15 });
+  if (ball.trail.length > 15) ball.trail.shift();
     
-    // Apply gravity
-    ball.velocityY += physics.gravity;
+    // Apply gravity with delta time
+  ball.velocityY += physics.gravity * deltaMultiplier;
     
-    // Apply air resistance
-    ball.velocityX *= ball.airResistance;
-    ball.velocityY *= ball.airResistance;
+   // Apply air resistance with delta time
+  ball.velocityX *= Math.pow(ball.airResistance, deltaMultiplier);
+  ball.velocityY *= Math.pow(ball.airResistance, deltaMultiplier);
     
-    // Update position
-    ball.x += ball.velocityX;
-    ball.y += ball.velocityY;
+    // Update position with delta time
+  ball.x += ball.velocityX * deltaMultiplier;
+  ball.y += ball.velocityY * deltaMultiplier;
+
+  // Add left and right boundary collision detection
+  const leftBoundary = camera.x + 50; // Left boundary with some padding
+  const rightBoundary = camera.x + 750; // Right boundary (canvas width - padding)
+
+  // Check left boundary collision - only if moving towards boundary
+  if (ball.x - ball.radius <= leftBoundary && ball.velocityX < 0) {
+    ball.x = leftBoundary + ball.radius; // Position ball just inside boundary
+    ball.velocityX = -ball.velocityX * 0.7; // Reverse and dampen horizontal velocity
+    ball.bounceCount++;
+    
+    // Add visual and audio feedback
+    addParticles(ball.x, ball.y, '#FFD700', 6);
+    playSound(280, 0.12, 0.1);
+  }
+
+  // Check right boundary collision - only if moving towards boundary
+  if (ball.x + ball.radius >= rightBoundary && ball.velocityX > 0) {
+    ball.x = rightBoundary - ball.radius; // Position ball just inside boundary
+    ball.velocityX = -ball.velocityX * 0.7; // Reverse and dampen horizontal velocity
+    ball.bounceCount++;
+    
+    // Add visual and audio feedback
+    addParticles(ball.x, ball.y, '#FFD700', 6);
+    playSound(280, 0.12, 0.1);
+  }
     
     // Check platform collisions
     ball.isOnPlatform = false;
     gameStateRef.current.platforms.forEach(platform => {
-      if (checkCollision(ball, platform)) {
-        // Calculate collision response
-        const centerX = platform.x + platform.width / 2;
-        const centerY = platform.y + platform.height / 2;
+if (checkCollision(ball, platform)) {
+      // Calculate collision response
+      const centerX = platform.x + platform.width / 2;
+      const centerY = platform.y + platform.height / 2;
+      
+      const deltaX = ball.x - centerX;
+      const deltaY = ball.y - centerY;
+      
+      const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
+      
+      if (platform.type === 'deadly') {
+        // Hit deadly obstacle - restart game
+        ball.x = 400; // Original starting position
+        ball.y = 500; // Original starting position
+        ball.velocityX = 0;
+        ball.velocityY = 0;
+        ball.isLaunched = false;
+        ball.canSling = true;
+        ball.isOnPlatform = true;
+        ball.bounceCount = 0;
+        ball.currentPlatform = null;
         
-        const deltaX = ball.x - centerX;
-        const deltaY = ball.y - centerY;
+        // IMPORTANT: Reset camera to starting position
+        gameStateRef.current.camera.y = 0;
+        gameStateRef.current.camera.x = 0;
         
-        const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
+        // IMPORTANT: Regenerate initial platforms
+        regenerateInitialPlatforms();
         
-        if (platform.type === 'deadly') {
-          // Hit deadly obstacle - restart game
-          ball.x = 400; // Original starting position
-          ball.y = 500; // Original starting position
-          ball.velocityX = 0;
-          ball.velocityY = 0;
-          ball.isLaunched = false;
-          ball.canSling = true;
-          ball.isOnPlatform = true;
-          ball.bounceCount = 0;
-          ball.currentPlatform = null;
-          
-          // IMPORTANT: Reset camera to starting position
-          gameStateRef.current.camera.y = 0;
-          gameStateRef.current.camera.x = 0;
-          
-          // IMPORTANT: Regenerate initial platforms
-          regenerateInitialPlatforms();
-          
-          // Reset score to 0 for game restart
-          gameStateRef.current.score = 0;
-          setScore(0);
-          
-          addFloatingText(ball.x, ball.y, 'Game Over!', '#ff4444');
-          addParticles(ball.x, ball.y, '#ff4444', 12);
-          playSound(150, 0.3, 0.2);
-          
-          setGameState('ready');
-          gameStateRef.current.gameState = 'ready';
-          return;
-        }
+        // Reset score to 0 for game restart
+        gameStateRef.current.score = 0;
+        setScore(0);
+        
+        addFloatingText(ball.x, ball.y, 'Game Over!', '#ff4444');
+        addParticles(ball.x, ball.y, '#ff4444', 12);
+        playSound(150, 0.3, 0.2);
+        
+        setGameState('ready');
+        gameStateRef.current.gameState = 'ready';
+        return;
+      }
         
         // Normal collision
-        if (platform.type !== 'deadly') {
-          // Determine collision side
-          const overlapX = (ball.radius + platform.width / 2) - Math.abs(deltaX);
-          const overlapY = (ball.radius + platform.height / 2) - Math.abs(deltaY);
+      if (platform.type !== 'deadly') {
+        // Determine collision side
+        const overlapX = (ball.radius + platform.width / 2) - Math.abs(deltaX);
+        const overlapY = (ball.radius + platform.height / 2) - Math.abs(deltaY);
           
           // Only land on platform if:
           // 1. Vertical overlap is smaller (hitting top/bottom)
-          // 2. Ball is above platform center (deltaY > 0)
-          // 3. Ball is moving downward (velocityY > 0) - NEW CONDITION
-          if (overlapY < overlapX && deltaY > 0 && ball.velocityY > 0) {
-            // Landing on top of platform - stop the ball here
-            ball.y = platform.y - ball.radius;
-            ball.velocityX = 0;
-            ball.velocityY = 0;
-            ball.isLaunched = false;
-            ball.canSling = true;
-            ball.isOnPlatform = true;
-            ball.bounceCount = 0; // Reset bounce count for next launch
-            ball.currentPlatform = platform; // Set current platform
-            
-            // NEW SCORING SYSTEM: Only score if platform hasn't been scored before
-            if (!platform.hasBeenScored && platform.type !== 'deadly') {
-              platform.hasBeenScored = true; // Mark as scored
-              const points = Math.max(1, Math.floor((Math.abs(platform.y) / 100) + 1));
-              gameStateRef.current.score += points;
-              setScore(gameStateRef.current.score);
-              
-              // Visual feedback
-              addFloatingText(ball.x, ball.y, `+${points}`, '#4CAF50');
-              addParticles(ball.x, ball.y, platform.color, 6);
-              playSound(300, 0.15, 0.1);
-            }
-            
-            setGameState('ready');
-            gameStateRef.current.gameState = 'ready';
-          } else {
-            // Side collision or hitting from below - bounce off
-            if (overlapX < overlapY) {
-              // Horizontal collision - reduce horizontal bounce significantly
-              const dampingFactor = ball.bounceCount === 0 ? 0.4 : 0.6; // Extra damping for first bounce
-              ball.velocityX = -ball.velocityX * ball.bounciness * dampingFactor;
-              ball.x = deltaX > 0 ? platform.x + platform.width + ball.radius : platform.x - ball.radius;
-            } else {
-              // Vertical collision (from below or above with upward velocity)
-              const dampingFactor = ball.bounceCount === 0 ? 0.6 : 1.0; // Reduce first bounce height
-              ball.velocityY = -ball.velocityY * ball.bounciness * dampingFactor;
-              // Reduce horizontal velocity on vertical bounces to prevent sliding off
-              ball.velocityX *= 0.7; // Dampen horizontal movement
-              if (deltaY > 0) {
-                // Hit from below
-                ball.y = platform.y + platform.height + ball.radius;
-              } else {
-                // Hit from above but with upward velocity
-                ball.y = platform.y - ball.radius;
-              }
-            }
-
-            // Check if velocity is too small to continue bouncing
-            const totalVelocity = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
-            if (totalVelocity < gameStateRef.current.physics.minVelocity || ball.bounceCount >= ball.maxBounces) {
-              // Stop the ball and land it on the nearest platform below
+          // 2. Ball's BOTTOM is above platform's TOP (ball.y + ball.radius < platform.y)
+          // 3. Ball is moving downward (velocityY > 0)
+            if (overlapY < overlapX && (ball.y + ball.radius) < platform.y && ball.velocityY > 0) {
+              // Landing on top of platform - stop the ball here
+              ball.y = platform.y - ball.radius;
               ball.velocityX = 0;
               ball.velocityY = 0;
               ball.isLaunched = false;
@@ -691,31 +703,86 @@ const regenerateInitialPlatforms = useCallback(() => {
               ball.isOnPlatform = true;
               ball.bounceCount = 0;
               ball.currentPlatform = platform;
-              // Position ball on top of platform
-              ball.y = platform.y - ball.radius;
-              setGameState('ready');
-              gameStateRef.current.gameState = 'ready';
-              // Add landing feedback
-              addFloatingText(ball.x, ball.y, 'Landed!', '#4CAF50');
-              addParticles(ball.x, ball.y, platform.color, 4);
-              playSound(250, 0.1, 0.08);
-            } else {
-              // NEW SCORING SYSTEM: Only score if platform hasn't been scored before
+            
+              // Score the platform if not already scored
               if (!platform.hasBeenScored && platform.type !== 'deadly') {
-                platform.hasBeenScored = true; // Mark as scored
+                platform.hasBeenScored = true;
                 const points = Math.max(1, Math.floor((Math.abs(platform.y) / 100) + 1));
                 gameStateRef.current.score += points;
                 setScore(gameStateRef.current.score);
-                
+            
                 // Visual feedback
                 addFloatingText(ball.x, ball.y, `+${points}`, '#4CAF50');
                 addParticles(ball.x, ball.y, platform.color, 6);
-                playSound(300 + impactForce * 20, 0.15, 0.1);
+                playSound(300, 0.15, 0.1);
               }
-              ball.bounceCount++;
+            
+              setGameState('ready');
+              gameStateRef.current.gameState = 'ready';
+            } else {
+                // Side collision or hitting from below - implement proper bouncing
+              if (overlapX < overlapY) {
+                // Horizontal collision - reverse horizontal velocity, keep vertical
+                ball.velocityX = -ball.velocityX * 0.7; // Reverse and dampen
+                ball.x = deltaX > 0 ? platform.x + platform.width + ball.radius : platform.x - ball.radius;
+                ball.bounceCount++;
+              } else {
+                  // Vertical collision - check if hitting from below or above
+                  if (ball.y > platform.y) {
+                    // Ball is hitting platform from below - preserve horizontal momentum
+                    ball.y = platform.y + platform.height + ball.radius;
+                    // Keep horizontal velocity, reverse and dampen vertical
+                    ball.velocityY = Math.abs(ball.velocityY) * 0.4; // Bounce down
+                    ball.bounceCount++;
+                  } else {
+                    // Ball is hitting platform from above - preserve horizontal momentum
+                    ball.y = platform.y - ball.radius;
+                    // Keep horizontal velocity, reverse and dampen vertical
+                    ball.velocityY = -Math.abs(ball.velocityY) * 0.5; // Bounce up
+                    ball.bounceCount++;
+                  }
+              }
+
+            // Check if velocity is too small to continue bouncing
+            const totalVelocity = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
+            if (totalVelocity < gameStateRef.current.physics.minVelocity || ball.bounceCount >= ball.maxBounces) {
+              // ONLY stop and land if ball is above the platform
+              if (ball.y < platform.y) {
+                // Stop the ball and land it on the platform
+                ball.velocityX = 0;
+                ball.velocityY = 0;
+                ball.isLaunched = false;
+                ball.canSling = true;
+                ball.isOnPlatform = true;
+                ball.bounceCount = 0;
+                ball.currentPlatform = platform;
+                ball.y = platform.y - ball.radius;
+                setGameState('ready');
+                gameStateRef.current.gameState = 'ready';
+                // Remove the "Landed!" text - only keep particles and sound
+                // addFloatingText(ball.x, ball.y, 'Landed!', '#4CAF50'); // REMOVED
+                addParticles(ball.x, ball.y, platform.color, 4);
+                playSound(250, 0.1, 0.08);
+              }
+              // If ball is below platform, don't stop it - let it continue falling
+              // Removed the else block that was stopping the ball below platforms
             }
+            
+            // Score the platform if not already scored
+            if (!platform.hasBeenScored && platform.type !== 'deadly') {
+              platform.hasBeenScored = true;
+              const points = Math.max(1, Math.floor((Math.abs(platform.y) / 100) + 1));
+              gameStateRef.current.score += points;
+              setScore(gameStateRef.current.score);
+              // Visual feedback
+              addFloatingText(ball.x, ball.y, `+${points}`, '#4CAF50');
+              addParticles(ball.x, ball.y, platform.color, 6);
+              playSound(300, 0.15, 0.1);
+            }
+
           }
         }
+        
       }
     });
     
@@ -737,7 +804,16 @@ const regenerateInitialPlatforms = useCallback(() => {
       // IMPORTANT: Regenerate initial platforms
       regenerateInitialPlatforms();
       
+      // CHECK AND UPDATE HIGH SCORE BEFORE RESETTING
+      if (gameStateRef.current.score > gameStateRef.current.highScore) {
+          gameStateRef.current.highScore = gameStateRef.current.score;
+          setHighScore(gameStateRef.current.highScore);
+          localStorage.setItem('ninjaSlingHighScore', gameStateRef.current.highScore.toString());
+          addFloatingText(ball.x, ball.y - 30, 'NEW HIGH SCORE!', '#FFD700');
+      }
+      
       // Reset score and show game over message
+
       gameStateRef.current.score = 0;
       setScore(0);
       
@@ -809,30 +885,48 @@ const regenerateInitialPlatforms = useCallback(() => {
 
   // Render game - modified camera transform for vertical movement
 // Render game - enhanced with cool visual effects
+// Update the render function with better safety checks
 const render = useCallback(() => {
   const canvas = canvasRef.current;
   if (!canvas) return;
   
   const ctx = canvas.getContext('2d');
   const camera = gameStateRef.current.camera;
+  
+  // Enhanced safety checks to prevent NaN values
+  if (!camera || typeof camera.y !== 'number' || isNaN(camera.y)) {
+    return;
+  }
+  
   const time = Date.now() * 0.001; // Time for animations
   
   // Create dynamic animated gradient background
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
   
-  // Animated colors that shift based on camera height
+  // Animated colors that shift based on camera height with NaN protection
   const heightFactor = Math.max(0, -camera.y / 1000);
-  const r1 = Math.floor(30 + Math.sin(time * 0.5) * 15 + heightFactor * 20);
-  const g1 = Math.floor(60 + Math.cos(time * 0.3) * 20 + heightFactor * 30);
-  const b1 = Math.floor(114 + Math.sin(time * 0.7) * 30 + heightFactor * 40);
   
-  const r2 = Math.floor(42 + Math.cos(time * 0.4) * 20 + heightFactor * 25);
-  const g2 = Math.floor(82 + Math.sin(time * 0.6) * 25 + heightFactor * 35);
-  const b2 = Math.floor(152 + Math.cos(time * 0.8) * 35 + heightFactor * 45);
+  // Add NaN checks for all color calculations
+  const r1 = Math.floor(30 + Math.sin(time * 0.5) * 15 + (isNaN(heightFactor) ? 0 : heightFactor * 20));
+  const g1 = Math.floor(60 + Math.cos(time * 0.3) * 20 + (isNaN(heightFactor) ? 0 : heightFactor * 30));
+  const b1 = Math.floor(114 + Math.sin(time * 0.7) * 30 + (isNaN(heightFactor) ? 0 : heightFactor * 40));
   
-  gradient.addColorStop(0, `rgb(${r1}, ${g1}, ${b1})`);
-  gradient.addColorStop(0.6, `rgb(${Math.floor((r1+r2)/2)}, ${Math.floor((g1+g2)/2)}, ${Math.floor((b1+b2)/2)})`);
-  gradient.addColorStop(1, `rgb(${r2}, ${g2}, ${b2})`);
+  const r2 = Math.floor(42 + Math.cos(time * 0.4) * 20 + (isNaN(heightFactor) ? 0 : heightFactor * 25));
+  const g2 = Math.floor(82 + Math.sin(time * 0.6) * 25 + (isNaN(heightFactor) ? 0 : heightFactor * 35));
+  const b2 = Math.floor(152 + Math.cos(time * 0.8) * 35 + (isNaN(heightFactor) ? 0 : heightFactor * 45));
+  
+  // Ensure all color values are valid numbers
+  const safeR1 = isNaN(r1) ? 30 : Math.max(0, Math.min(255, r1));
+  const safeG1 = isNaN(g1) ? 60 : Math.max(0, Math.min(255, g1));
+  const safeB1 = isNaN(b1) ? 114 : Math.max(0, Math.min(255, b1));
+  
+  const safeR2 = isNaN(r2) ? 42 : Math.max(0, Math.min(255, r2));
+  const safeG2 = isNaN(g2) ? 82 : Math.max(0, Math.min(255, g2));
+  const safeB2 = isNaN(b2) ? 152 : Math.max(0, Math.min(255, b2));
+  
+  gradient.addColorStop(0, `rgb(${safeR1}, ${safeG1}, ${safeB1})`);
+  gradient.addColorStop(0.6, `rgb(${Math.floor((safeR1+safeR2)/2)}, ${Math.floor((safeG1+safeG2)/2)}, ${Math.floor((safeB1+safeB2)/2)})`);
+  gradient.addColorStop(1, `rgb(${safeR2}, ${safeG2}, ${safeB2})`);
   
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1050,30 +1144,32 @@ const render = useCallback(() => {
   
   // UI elements with enhanced styling
   ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-  ctx.fillRect(10, 10, 200, 60);
-  
+  ctx.fillRect(10, 10, 200, 60); // Move to left top corner (x=10)
+
   const uiGradient = ctx.createLinearGradient(10, 10, 210, 70);
   uiGradient.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
   uiGradient.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
   ctx.fillStyle = uiGradient;
-  ctx.fillRect(10, 10, 200, 60);
-  
+  ctx.fillRect(10, 10, 200, 60); // Move gradient overlay to match
+
   // Score text with glow
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 18px Arial';
+  ctx.textAlign = 'left';
   ctx.shadowColor = '#00ff88';
   ctx.shadowBlur = 3;
-  ctx.fillText(`Score: ${gameStateRef.current.score}`, 20, 35);
-  ctx.fillText(`High Score: ${gameStateRef.current.highScore}`, 20, 55);
+  ctx.fillText(`Score: ${gameStateRef.current.score}`, 20, 35); // Move text to match box (x=20)
+  ctx.fillText(`High Score: ${gameStateRef.current.highScore}`, 20, 55); // Move text to match box (x=20)
   ctx.shadowBlur = 0;
-  
+  ctx.textAlign = 'center'; // Reset alignment
+
   // Enhanced instructions
   ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
   ctx.font = '16px Arial';
   ctx.textAlign = 'center';
   ctx.shadowColor = '#000000';
   ctx.shadowBlur = 2;
-  
+
   if (gameStateRef.current.gameState === 'ready') {
     ctx.fillText('🎯 Click and drag from the ball to sling upward to the next platform! 🚀', canvas.width / 2, canvas.height - 30);
   } else if (gameStateRef.current.gameState === 'aiming') {
@@ -1180,35 +1276,62 @@ const render = useCallback(() => {
   }, []);
   
   // Game loop
-  const gameLoop = useCallback(() => {
-    updatePhysics();
+ // Update the game loop to use delta time
+  const gameLoop = useCallback((currentTime = performance.now()) => {
+    const timing = gameStateRef.current.timing;
+  
+    // Calculate delta time with proper initialization
+    if (timing.lastTime === 0) {
+      timing.lastTime = currentTime;
+      timing.deltaTime = timing.fixedTimeStep; // Use fixed step for first frame
+    } else {
+      const rawDelta = currentTime - timing.lastTime;
+      timing.deltaTime = Math.min(rawDelta, 33.33); // Cap at 30 FPS minimum
+      timing.lastTime = currentTime;
+    }
+  
+    // Normalize delta time to 60 FPS baseline with NaN protection  
+    const deltaMultiplier = isNaN(timing.deltaTime) ? 1 : timing.deltaTime / timing.fixedTimeStep;
+  
+    updatePhysics(deltaMultiplier);
     render();
     requestAnimationFrame(gameLoop);
   }, [updatePhysics, render]);
   
   // Initialize game
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    // Load high score
-    const savedHighScore = localStorage.getItem('ninjaSlingHighScore');
-    if (savedHighScore) {
-      gameStateRef.current.highScore = parseInt(savedHighScore);
-      setHighScore(gameStateRef.current.highScore);
-    }
-    
-    // Set initial state
-    gameStateRef.current.ball.isOnPlatform = true;
-    gameStateRef.current.ball.canSling = true;
-    
-    // Set up event listeners
-    canvas.addEventListener('mousedown', handlePointerDown);
-    canvas.addEventListener('mousemove', handlePointerMove);
-    canvas.addEventListener('mouseup', handlePointerUp);
-    canvas.addEventListener('touchstart', handlePointerDown);
-    canvas.addEventListener('touchmove', handlePointerMove);
-    canvas.addEventListener('touchend', handlePointerUp);
+ useEffect(() => {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+  
+  // Initialize timing system properly
+  gameStateRef.current.timing = {
+    lastTime: 0,
+    deltaTime: 16.67, // Start with 60 FPS baseline
+    targetFPS: 60,
+    fixedTimeStep: 1000 / 60
+  };
+  
+  // Load high score
+  const savedHighScore = localStorage.getItem('ninjaSlingHighScore');
+  if (savedHighScore) {
+    gameStateRef.current.highScore = parseInt(savedHighScore);
+    setHighScore(gameStateRef.current.highScore);
+  }
+  
+  // Set initial state
+  gameStateRef.current.ball.isOnPlatform = true;
+  gameStateRef.current.ball.canSling = true;
+  
+  // Set up event listeners
+  canvas.addEventListener('mousedown', handlePointerDown);
+  canvas.addEventListener('mousemove', handlePointerMove);
+  canvas.addEventListener('mouseup', handlePointerUp);
+  canvas.addEventListener('touchstart', handlePointerDown);
+  canvas.addEventListener('touchmove', handlePointerMove);
+  canvas.addEventListener('touchend', handlePointerUp);
+  
+  // Start game loop with proper timing
+  requestAnimationFrame(gameLoop);
     
     // Start game loop
     gameLoop();
@@ -1251,36 +1374,48 @@ const render = useCallback(() => {
   }, []);
   
   return (
-    <div>
-      <canvas 
-        ref={canvasRef} 
-        width={800} 
-        height={600}
-        className={styles.gameCanvas}
-        style={{ 
-          border: '2px solid #333', 
-          borderRadius: '10px',
-          cursor: gameState === 'ready' ? 'crosshair' : gameState === 'aiming' ? 'crosshair' : 'default'
+  <div style={{ 
+    display: 'flex', 
+    flexDirection: 'column', 
+    alignItems: 'center' 
+  }}>
+    {/* Game Canvas */}
+    <canvas 
+      ref={canvasRef} 
+      width={800} 
+      height={600}
+      className={styles.gameCanvas}
+      style={{ 
+        border: '2px solid #333', 
+        borderRadius: '10px',
+        cursor: gameState === 'ready' ? 'crosshair' : gameState === 'aiming' ? 'crosshair' : 'default',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+      }}
+    />
+    
+    {/* Reset Button */}
+    <div style={{ marginTop: '10px', textAlign: 'center' }}>
+      <button 
+        onClick={resetGame}
+        style={{
+          padding: '10px 20px',
+          fontSize: '16px',
+          backgroundColor: '#ff6b6b',
+          color: 'white',
+          border: 'none',
+          borderRadius: '5px',
+          cursor: 'pointer',
+          boxShadow: '0 4px 15px rgba(255,107,107,0.3)',
+          transition: 'transform 0.2s'
         }}
-      />
-      <div style={{ marginTop: '10px', textAlign: 'center' }}>
-        <button 
-          onClick={resetGame}
-          style={{
-            padding: '10px 20px',
-            fontSize: '16px',
-            backgroundColor: '#ff6b6b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer'
-          }}
-        >
-          Reset Game
-        </button>
-      </div>
+        onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+        onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+      >
+        Reset Game
+      </button>
     </div>
-  );
+  </div>
+);
 };
 
 export default NinjaSlingGame;

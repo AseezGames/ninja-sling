@@ -6,12 +6,24 @@ export default function Home() {
   return (
     <div className={styles.container}>
       <h1>Ninja Sling</h1>
-      <GameCanvas />
-      <div className={styles.controls}>
-        <p>Click and drag from the ball to aim</p>
-        <p>Release to launch your ninja to the next platform!</p>
-        <p>Avoid red platforms - they&apos;re deadly!</p>
+      
+      {/* Simple Developer Credits - Right below title */}
+      <div style={{
+        fontSize: '12px',
+        color: 'rgba(255,255,255,0.8)',
+        textAlign: 'center',
+        marginBottom: '15px',
+        lineHeight: '1.3'
+      }}>
+        <div style={{ fontSize: '11px', marginBottom: '3px' }}>
+          🎮 <span style={{ color: '#FFD700' }}>Aashish Ghimire (Aseez Games)</span>
+        </div>
+        <div style={{ fontSize: '10px', opacity: 0.7 }}>
+          Special thanks: Nischal B. • Kiran D. • Sujan A. • Anish P. • Krishna C. • Pradip C. • Anish B. • Sakar K.
+        </div>
       </div>
+      
+      <GameCanvas />
     </div>
   );
 }

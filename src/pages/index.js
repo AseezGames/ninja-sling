@@ -170,7 +170,7 @@ export default function Home() {
           🎮 <span style={{ color: '#FFD700' }}>Aashish Ghimire (Aseez Games)</span>
         </div>
         <div style={{ fontSize: '10px', opacity: 0.7 }}>
-          Special thanks: Nischal B. • Kiran D. • Sujan A. • Anish P. • Krishna C. • Pradip C. • Anish B. • Sakar K.
+          Special thanks: Aryan S. • Nischal B. • Kiran D. • Sujan A. • Anish P. • Krishna C. • Pradip C. • Anish B. • Sakar K.
         </div>
       </div>
 

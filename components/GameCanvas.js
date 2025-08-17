@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import styles from '../styles/Game.module.css';
+import styles from '../src/styles/Game.module.css';
 
-const NinjaSlingGame = () => {
+
+const NinjaSlingGame = ({ playerName, onGameOver }) => {
   const canvasRef = useRef(null);
   const gameStateRef = useRef({
     // Ball (Ninja) properties
@@ -652,9 +653,12 @@ if (checkCollision(ball, platform)) {
       const impactForce = Math.sqrt(ball.velocityX * ball.velocityX + ball.velocityY * ball.velocityY);
       
       if (platform.type === 'deadly') {
-        // Hit deadly obstacle - restart game
-        ball.x = 400; // Original starting position
-        ball.y = 500; // Original starting position
+        // Hit deadly obstacle - call onGameOver before resetting
+        const finalScore = gameStateRef.current.score;
+        
+        // Reset game state
+        ball.x = 400;
+        ball.y = 500;
         ball.velocityX = 0;
         ball.velocityY = 0;
         ball.isLaunched = false;
@@ -663,14 +667,9 @@ if (checkCollision(ball, platform)) {
         ball.bounceCount = 0;
         ball.currentPlatform = null;
         
-        // IMPORTANT: Reset camera to starting position
         gameStateRef.current.camera.y = 0;
         gameStateRef.current.camera.x = 0;
-        
-        // IMPORTANT: Regenerate initial platforms
         regenerateInitialPlatforms();
-        
-        // Reset score to 0 for game restart
         gameStateRef.current.score = 0;
         setScore(0);
         
@@ -680,6 +679,12 @@ if (checkCollision(ball, platform)) {
         
         setGameState('ready');
         gameStateRef.current.gameState = 'ready';
+        
+        // Call onGameOver with final score
+        if (onGameOver) {
+          setTimeout(() => onGameOver(finalScore), 1500); // Delay to show game over message
+        }
+        
         return;
       }
         
@@ -788,20 +793,18 @@ if (checkCollision(ball, platform)) {
     
     // Check if ball is out of bounds - add right boundary check relative to camera
   if (ball.y > 650 || ball.x < -50 || ball.x > camera.x + 900) {
+      const finalScore = gameStateRef.current.score;
       // Reset to original starting position
-      ball.x = 400; // Original starting position
-      ball.y = 500; // Original starting position
+      ball.x = 400;
+      ball.y = 500;
       ball.velocityX = 0;
       ball.velocityY = 0;
       ball.isLaunched = false;
       ball.canSling = true;
       ball.isOnPlatform = true;
       
-      // IMPORTANT: Reset camera to starting position
       gameStateRef.current.camera.y = 0;
       gameStateRef.current.camera.x = 0;
-      
-      // IMPORTANT: Regenerate initial platforms
       regenerateInitialPlatforms();
       
       // CHECK AND UPDATE HIGH SCORE BEFORE RESETTING
@@ -812,8 +815,6 @@ if (checkCollision(ball, platform)) {
           addFloatingText(ball.x, ball.y - 30, 'NEW HIGH SCORE!', '#FFD700');
       }
       
-      // Reset score and show game over message
-
       gameStateRef.current.score = 0;
       setScore(0);
       
@@ -823,6 +824,11 @@ if (checkCollision(ball, platform)) {
       
       setGameState('ready');
       gameStateRef.current.gameState = 'ready';
+      
+      // Call onGameOver with final score
+      if (onGameOver) {
+        setTimeout(() => onGameOver(finalScore), 1500); // Delay to show game over message
+      }
     }
     
     // Generate new platforms as camera moves up (changed from right to up)
@@ -1144,13 +1150,24 @@ const render = useCallback(() => {
   
   // UI elements with enhanced styling
   ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-  ctx.fillRect(10, 10, 200, 60); // Move to left top corner (x=10)
+  ctx.fillRect(10, 10, 250, 80); // Increased width for player name
 
-  const uiGradient = ctx.createLinearGradient(10, 10, 210, 70);
+  const uiGradient = ctx.createLinearGradient(10, 10, 260, 90);
   uiGradient.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
   uiGradient.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
   ctx.fillStyle = uiGradient;
-  ctx.fillRect(10, 10, 200, 60); // Move gradient overlay to match
+  ctx.fillRect(10, 10, 250, 80);
+
+  // Player name with glow
+  if (playerName) {
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'left';
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 3;
+    ctx.fillText(`🥷 ${playerName}`, 20, 25);
+    ctx.shadowBlur = 0;
+  }
 
   // Score text with glow
   ctx.fillStyle = '#ffffff';
@@ -1158,10 +1175,10 @@ const render = useCallback(() => {
   ctx.textAlign = 'left';
   ctx.shadowColor = '#00ff88';
   ctx.shadowBlur = 3;
-  ctx.fillText(`Score: ${gameStateRef.current.score}`, 20, 35); // Move text to match box (x=20)
-  ctx.fillText(`High Score: ${gameStateRef.current.highScore}`, 20, 55); // Move text to match box (x=20)
+  ctx.fillText(`Score: ${gameStateRef.current.score}`, 20, 50);
+  ctx.fillText(`High Score: ${gameStateRef.current.highScore}`, 20, 70);
   ctx.shadowBlur = 0;
-  ctx.textAlign = 'center'; // Reset alignment
+  ctx.textAlign = 'center';
 
   // Enhanced instructions
   ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
